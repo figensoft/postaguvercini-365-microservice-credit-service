@@ -1,0 +1,11 @@
+﻿{
+  "profiles": {
+    "microservice_credit_service": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
