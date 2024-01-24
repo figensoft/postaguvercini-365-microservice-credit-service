@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  microservice-credit-service:
+    image: figensoft/postaguvercini-365-microservice-credit-service:${VERSION}
+    container_name: ${COMPOSE_PROJECT_NAME}-microservice-credit-service
+    restart: always
+    # Uncomment if you want to expose port to host machine
+    #ports:
+    #  - ${PORT_BEGIN}055:80
+    #  - ${PORT_BEGIN}056:443
+    environment:
+      - TZ=Europe/Istanbul
+      - SQL:ConnectionString=${SQL_CONNECTION_STRING}
+      - RabbitMQ:Username=${RABBITMQ_USERNAME}
+      - RabbitMQ:Password=${RABBITMQ_PASSWORD}
+      - RabbitMQ:Queue=logging.${RABBITMQ_QUEUE_PREFIX}.survey
+      - RabbitMQ:ChannelNameOTP=${RABBITMQ_QUEUE_PREFIX}.microservice.survey.OTP
+      - RabbitMQ:ChannelNameINF=${RABBITMQ_QUEUE_PREFIX}.microservice.survey.INF
+      - RabbitMQ:ChannelNameADV=${RABBITMQ_QUEUE_PREFIX}.microservice.survey.ADV
+      - Security:RequestSecret=${REQUEST_SECRET}
+      - Redis:ConnectionString=${REDIS_CONNECTION_STRING}
+      - Redis:Password=${REDIS_PASSWORD}
+      - Encryption:AESKey=${ENCRYPTION_AES_KEY}
+      - Encryption:AESIndexVector=${ENCRYPTION_AES_INDEX_VECTOR}
+      - App:Domain=${APP_DOMAIN}
+    volumes:
+      - /d/Apps_Traces/${COMPOSE_PROJECT_NAME}/microservice-credit-service:/var/log/postaguvercini-365/microservice-credit-service
+      - /c/FigensoftBackendProjects/postaguvercini-365-microservice-credit-service:/var/postaguvercini-365/microservice-credit-service
+     # - /c/Apps/${COMPOSE_PROJECT_NAME}/microservice-credit-service:/var/postaguvercini-365/microservice-credit-service  
+     # Uncomment and adjust local path if you want to use with local path instead of container itself
+     # - /d/Projects/${PROJECT}-microservice-credit-service/bin/Release/net7.0:/app
+    networks:
+      - mynetwork
+      - message-broker
+      - caching
+      - database
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --silent --fail http://localhost:80/healthcheck || exit 1",
+        ]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      
+networks:
+  mynetwork:
+    name: ${COMPOSE_PROJECT_NAME}
+    driver: bridge
+  caching:
+    name: caching
+    driver: bridge
+  message-broker:
+    name: message-broker
+    driver: bridge
+  database:
+    name: database
+    driver: bridge

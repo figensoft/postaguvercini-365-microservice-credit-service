@@ -1,0 +1,114 @@
+name: Build and Test
+
+on:
+  pull_request:
+    types: [ closed ]
+    branches: [ test ]
+
+env:
+  DOTNET_VERSION: '7.0.404' # The .NET SDK version to use
+
+jobs:
+  build-and-release:
+    if: github.event.pull_request.merged == true
+
+    #name: build-and-test-${{matrix.os}}
+    #runs-on: ${{ matrix.os }}
+    #strategy:
+    #  matrix:
+    #    os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - id: set_var
+      run: |
+          content=`cat appsettings.json`
+          # the following lines are only required for multi line json
+          content="${content//'%'/'%25'}"
+          content="${content//$'\n'/'%0A'}"
+          content="${content//$'\r'/'%0D'}"
+          # end of optional handling for multi line json
+          echo "::set-output name=configJson::$content"
+    - run: |
+          echo "${{fromJson(steps.set_var.outputs.configJson).App.Version}}"
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+ 
+    - name: Install dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Test
+      run: dotnet test --no-restore --verbosity normal
+
+    - name: Publish
+      run: dotnet publish -o ./bin/Release/net7.0/publish
+
+    - name: Zip Files
+      run: 7z a release_files/v${{fromJson(steps.set_var.outputs.configJson).App.Version}}.zip ./bin/Release/net7.0/publish
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      with:
+          tag_name: v${{fromJson(steps.set_var.outputs.configJson).App.Version}}-test
+          release_name: v${{fromJson(steps.set_var.outputs.configJson).App.Version}}-test
+          body: ${{ github.event.pull_request.body }}
+          draft: false
+          prerelease: true
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+    - name: Docker build
+      uses: docker/build-push-action@v3
+      with:
+          push: true
+          context: .
+          tags: figensoft/${{fromJson(steps.set_var.outputs.configJson).App.Project}}-${{fromJson(steps.set_var.outputs.configJson).App.Name}}:${{fromJson(steps.set_var.outputs.configJson).App.Version}}-test
+          
+    - name: Docker build
+      uses: docker/build-push-action@v3
+      with:
+          push: false
+          context: .
+          tags: figensoft/${{fromJson(steps.set_var.outputs.configJson).App.Project}}-${{fromJson(steps.set_var.outputs.configJson).App.Name}}:${{fromJson(steps.set_var.outputs.configJson).App.Version}}
+          outputs: type=docker,dest=/tmp/dockerimage.tar
+
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info:  
+          asset_path: release_files/v${{fromJson(steps.set_var.outputs.configJson).App.Version}}.zip
+          asset_name: ${{fromJson(steps.set_var.outputs.configJson).App.Name}}_v${{fromJson(steps.set_var.outputs.configJson).App.Version}}.zip
+          asset_content_type: application/zip
+          
+    - name: Upload Release Asset Docker
+      id: upload-release-asset-docker
+      uses: actions/upload-release-asset@v1
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info:  
+          asset_path: /tmp/dockerimage.tar
+          asset_name: ${{fromJson(steps.set_var.outputs.configJson).App.Name}}_v${{fromJson(steps.set_var.outputs.configJson).App.Version}}_dockerimage.tar
+          asset_content_type: application/vnd.docker.image.rootfs.diff.tar.gzip
+      
+   

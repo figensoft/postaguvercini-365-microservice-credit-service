@@ -1,0 +1,1 @@
+docker export -o postaguvercini-365-microservice-credit-service.tar postaguvercini-365-microservice-survey
